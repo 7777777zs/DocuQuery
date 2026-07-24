@@ -40,6 +40,14 @@ uvicorn app.main:app --reload
 
 The API is available at `http://127.0.0.1:8000`. Interactive OpenAPI documentation is available at `/docs`.
 
+In a second terminal, start the Streamlit frontend on a separate port:
+
+```bash
+streamlit run frontend.py --server.port 8501
+```
+
+Open `http://localhost:8501`, upload a PDF, and ask questions after the API has indexed it.
+
 ## API
 
 Upload a PDF:
