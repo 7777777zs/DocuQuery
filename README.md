@@ -65,6 +65,16 @@ curl -X POST http://127.0.0.1:8000/query \
   -d '{"question":"What is the document about?","document_id":"<document-id>"}'
 ```
 
+Both upload and query responses include a `session_id`. Include it in later queries to retain the last ten conversation exchanges:
+
+```json
+{
+  "question": "Can you elaborate on that?",
+  "document_id": "<document-id>",
+  "session_id": "<session-id>"
+}
+```
+
 The process-local document store is cleared whenever the API restarts.
 
 ## Test

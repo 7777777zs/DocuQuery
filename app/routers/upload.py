@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, Request, UploadFile, status
 from pypdf.errors import PdfReadError
 
 from app.models.schemas import UploadResponse
@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(file: UploadFile) -> UploadResponse:
+async def upload_document(file: UploadFile, request: Request) -> UploadResponse:
     """Validate, ingest, and store an uploaded PDF."""
 
     filename = file.filename or ""
@@ -37,4 +37,7 @@ async def upload_document(file: UploadFile) -> UploadResponse:
 
     document_id = str(uuid4())
     document_store.store(document_id, index, metadata)
-    return UploadResponse(document_id=document_id)
+    session_store = request.app.state.session_store
+    session_id = session_store.create_session()
+    session_store.bind_to_document(session_id, document_id)
+    return UploadResponse(document_id=document_id, session_id=session_id)

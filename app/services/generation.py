@@ -9,13 +9,19 @@ from app.config import get_settings
 from app.models.schemas import Citation
 
 SYSTEM_PROMPT = (
-    "Answer the question using ONLY the provided context. Cite your sources using "
-    "[Source: filename, Page: N] format. If the context doesn't contain the answer, say so."
+    "You are a document Q&A assistant. Use the provided context to answer questions. "
+    "If the user references something from a previous answer, use the conversation history "
+    "to understand what they mean. Answer using ONLY the provided context. Always cite sources "
+    "using [Source: filename, Page: N] format. If the context doesn't contain the answer, say so."
 )
 _CITATION_PATTERN = re.compile(r"\[Source:\s*(.*?),\s*Page:\s*(\d+)\]")
 
 
-def generate_answer(query: str, retrieved_chunks: list[dict[str, Any]]) -> dict[str, Any]:
+def generate_answer(
+    query: str,
+    retrieved_chunks: list[dict[str, Any]],
+    chat_history: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
     """Generate an answer from retrieved chunks and resolve its cited sources."""
 
     settings = get_settings()
@@ -34,12 +40,12 @@ def generate_answer(query: str, retrieved_chunks: list[dict[str, Any]]) -> dict[
         model=settings.CHAT_MODEL,
         api_key=settings.OPENAI_API_KEY,
     )
-    response = model.invoke(
-        [
-            ("system", SYSTEM_PROMPT),
-            ("human", prompt),
-        ]
-    )
+    history_messages = [
+        (message["role"], message["content"])
+        for message in (chat_history or [])
+        if message.get("role") in {"user", "assistant"} and message.get("content")
+    ]
+    response = model.invoke([("system", SYSTEM_PROMPT), *history_messages, ("human", prompt)])
     answer = str(response.content)
 
     citations: list[Citation] = []

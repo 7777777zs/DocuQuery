@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.query import router as query_router
 from app.routers.upload import router as upload_router
+from app.store.session_store import SessionStore
 
 
 @asynccontextmanager
@@ -18,6 +19,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="DocuQuery", version="0.1.0", lifespan=lifespan)
+app.state.session_store = SessionStore()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

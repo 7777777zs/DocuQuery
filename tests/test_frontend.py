@@ -30,17 +30,18 @@ def test_initialize_session_state_sets_defaults_without_overwriting_history():
     frontend.initialize_session_state(state)
 
     assert state["document_id"] is None
+    assert state["session_id"] is None
     assert state["uploaded_file_hash"] is None
     assert state["uploaded_filename"] is None
     assert state["chat_history"] == [{"role": "user", "content": "hello"}]
 
 
-def test_upload_document_posts_pdf_and_returns_document_id():
-    post = Mock(return_value=FakeResponse({"document_id": "doc-123"}))
+def test_upload_document_posts_pdf_and_returns_document_and_session_ids():
+    post = Mock(return_value=FakeResponse({"document_id": "doc-123", "session_id": "session-123"}))
 
-    document_id = frontend.upload_document("paper.pdf", b"pdf bytes", post)
+    result = frontend.upload_document("paper.pdf", b"pdf bytes", post)
 
-    assert document_id == "doc-123"
+    assert result == {"document_id": "doc-123", "session_id": "session-123"}
     post.assert_called_once_with(
         "http://localhost:8000/upload",
         files={"file": ("paper.pdf", b"pdf bytes", "application/pdf")},
@@ -53,6 +54,7 @@ def test_query_document_posts_question_and_returns_answer_with_citations():
         return_value=FakeResponse(
             {
                 "answer": "The answer is 42.",
+                "session_id": "session-123",
                 "citations": [
                     {"content": "42", "source": "paper.pdf", "page": 1}
                 ],
@@ -60,15 +62,20 @@ def test_query_document_posts_question_and_returns_answer_with_citations():
         )
     )
 
-    result = frontend.query_document("What is the answer?", "doc-123", post)
+    result = frontend.query_document("What is the answer?", "doc-123", "session-123", post)
 
     assert result["answer"] == "The answer is 42."
     assert result["citations"] == [
         {"content": "42", "source": "paper.pdf", "page": 1}
     ]
+    assert result["session_id"] == "session-123"
     post.assert_called_once_with(
         "http://localhost:8000/query",
-        json={"question": "What is the answer?", "document_id": "doc-123"},
+        json={
+            "question": "What is the answer?",
+            "document_id": "doc-123",
+            "session_id": "session-123",
+        },
         timeout=frontend.REQUEST_TIMEOUT_SECONDS,
     )
 

@@ -21,6 +21,7 @@ def initialize_session_state(state: MutableMapping[str, Any]) -> None:
     """Initialize the document and chat values used for one Streamlit session."""
 
     state.setdefault("document_id", None)
+    state.setdefault("session_id", None)
     state.setdefault("chat_history", [])
     state.setdefault("uploaded_file_hash", None)
     state.setdefault("uploaded_filename", None)
@@ -50,8 +51,8 @@ def upload_document(
     filename: str,
     file_bytes: bytes,
     post: Callable[..., requests.Response] = requests.post,
-) -> str:
-    """Upload a PDF to the API and return its generated document identifier."""
+) -> dict[str, str]:
+    """Upload a PDF to the API and return its document and session identifiers."""
 
     try:
         response = post(
@@ -63,15 +64,20 @@ def upload_document(
     except requests.RequestException as error:
         raise ApiRequestError(_error_message(error)) from error
 
-    document_id = response.json().get("document_id")
+    payload = response.json()
+    document_id = payload.get("document_id")
+    session_id = payload.get("session_id")
     if not isinstance(document_id, str) or not document_id:
         raise ApiRequestError("The upload response did not include a document ID.")
-    return document_id
+    if not isinstance(session_id, str) or not session_id:
+        raise ApiRequestError("The upload response did not include a session ID.")
+    return {"document_id": document_id, "session_id": session_id}
 
 
 def query_document(
     question: str,
     document_id: str,
+    session_id: str | None,
     post: Callable[..., requests.Response] = requests.post,
 ) -> dict[str, Any]:
     """Submit a question to the API and return its answer and citations."""
@@ -79,7 +85,11 @@ def query_document(
     try:
         response = post(
             f"{API_BASE_URL}/query",
-            json={"question": question, "document_id": document_id},
+            json={
+                "question": question,
+                "document_id": document_id,
+                "session_id": session_id,
+            },
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -89,9 +99,15 @@ def query_document(
     payload = response.json()
     answer = payload.get("answer")
     citations = payload.get("citations", [])
-    if not isinstance(answer, str) or not isinstance(citations, list):
+    returned_session_id = payload.get("session_id")
+    if (
+        not isinstance(answer, str)
+        or not isinstance(citations, list)
+        or not isinstance(returned_session_id, str)
+        or not returned_session_id
+    ):
         raise ApiRequestError("The query response was not in the expected format.")
-    return {"answer": answer, "citations": citations}
+    return {"answer": answer, "citations": citations, "session_id": returned_session_id}
 
 
 def render_citations(citations: list[dict[str, Any]]) -> None:
@@ -135,11 +151,12 @@ def main() -> None:
         if file_hash != st.session_state.uploaded_file_hash:
             with st.spinner("Indexing PDF..."):
                 try:
-                    document_id = upload_document(uploaded_file.name, file_bytes)
+                    upload_result = upload_document(uploaded_file.name, file_bytes)
                 except ApiRequestError as error:
                     st.error(f"Upload failed: {error}")
                 else:
-                    st.session_state.document_id = document_id
+                    st.session_state.document_id = upload_result["document_id"]
+                    st.session_state.session_id = upload_result["session_id"]
                     st.session_state.uploaded_file_hash = file_hash
                     st.session_state.uploaded_filename = uploaded_file.name
                     st.session_state.chat_history = []
@@ -164,13 +181,14 @@ def main() -> None:
     with st.chat_message("assistant"):
         with st.spinner("Searching the document..."):
             try:
-                result = query_document(question, document_id)
+                result = query_document(question, document_id, st.session_state.session_id)
             except ApiRequestError as error:
                 st.error(f"Question failed: {error}")
                 return
 
         st.markdown(result["answer"])
         render_citations(result["citations"])
+        st.session_state.session_id = result["session_id"]
         st.session_state.chat_history.append(
             {
                 "role": "assistant",
