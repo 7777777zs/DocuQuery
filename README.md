@@ -35,7 +35,7 @@ Set `OPENAI_API_KEY` in `.env`. The remaining settings have useful defaults:
 ## Run
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8000
 ```
 
 The API is available at `http://127.0.0.1:8000`. Interactive OpenAPI documentation is available at `/docs`.
